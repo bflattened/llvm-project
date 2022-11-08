@@ -245,16 +245,24 @@ MCSection *ObjectWriter::GetSpecificSection(const char *SectionName,
                                             const char *ComdatName) {
   Triple TheTriple(TripleName);
   MCSection *Section = nullptr;
-  SectionKind Kind = (attributes & CustomSectionAttributes_Executable)
-                         ? SectionKind::getText()
-                         : (attributes & CustomSectionAttributes_Writeable)
-                               ? SectionKind::getData()
-                               : SectionKind::getReadOnly();
+  SectionKind Kind;
+  if (attributes & CustomSectionAttributes_Executable)
+    Kind = SectionKind::getText();
+  else if (attributes & CustomSectionAttributes_Uninitialized)
+    Kind = SectionKind::getBSS();
+  else if (attributes & CustomSectionAttributes_Writeable)
+    Kind = SectionKind::getData();
+  else
+    Kind = SectionKind::getReadOnly();
+
   switch (TheTriple.getObjectFormat()) {
   case Triple::MachO: {
     unsigned typeAndAttributes = 0;
     if (attributes & CustomSectionAttributes_MachO_Init_Func_Pointers) {
       typeAndAttributes |= MachO::SectionType::S_MOD_INIT_FUNC_POINTERS;
+    }
+    if (attributes & CustomSectionAttributes_Uninitialized) {
+      typeAndAttributes |= MachO::S_ZEROFILL;
     }
     Section = OutContext->getMachOSection(
         (attributes & CustomSectionAttributes_Executable) ? "__TEXT" : "__DATA",
@@ -267,8 +275,11 @@ MCSection *ObjectWriter::GetSpecificSection(const char *SectionName,
     if (attributes & CustomSectionAttributes_Executable) {
       Characteristics |= COFF::IMAGE_SCN_CNT_CODE | COFF::IMAGE_SCN_MEM_EXECUTE;
     } else if (attributes & CustomSectionAttributes_Writeable) {
-      Characteristics |=
-          COFF::IMAGE_SCN_CNT_INITIALIZED_DATA | COFF::IMAGE_SCN_MEM_WRITE;
+      Characteristics |= COFF::IMAGE_SCN_MEM_WRITE;
+      if (attributes & CustomSectionAttributes_Uninitialized)
+        Characteristics |= COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA;
+      else
+        Characteristics |= COFF::IMAGE_SCN_CNT_INITIALIZED_DATA;
     } else {
       Characteristics |= COFF::IMAGE_SCN_CNT_INITIALIZED_DATA;
     }
@@ -295,8 +306,11 @@ MCSection *ObjectWriter::GetSpecificSection(const char *SectionName,
     } else if (attributes & CustomSectionAttributes_Writeable) {
       Flags |= ELF::SHF_WRITE;
     }
+    unsigned SectionType = (attributes & CustomSectionAttributes_Uninitialized)
+                               ? ELF::SHT_NOBITS
+                               : ELF::SHT_PROGBITS;
     Section =
-        OutContext->getELFSection(SectionName, ELF::SHT_PROGBITS, Flags, 0,
+        OutContext->getELFSection(SectionName, SectionType, Flags, 0,
                                   ComdatName != nullptr ? ComdatName : "");
     break;
   }
