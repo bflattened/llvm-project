@@ -9,6 +9,10 @@ set(LLVM_LINK_COMPONENTS
 
 message(STATUS "ObjWriter configuring with (${CMAKE_BUILD_TYPE}) build type and (${LLVM_DEFAULT_TARGET_TRIPLE}) default target triple")
 
+if (MSVC)
+  set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /NODEFAULTLIB:libucrt.lib /DEFAULTLIB:ucrt.lib")
+endif()
+
 add_llvm_library(objwriter SHARED
   objwriter.cpp
   debugInfo/codeView/codeViewTypeBuilder.cpp
